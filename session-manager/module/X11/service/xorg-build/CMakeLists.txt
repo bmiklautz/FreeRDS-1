@@ -57,7 +57,7 @@ else()
 			message("/etc/debian_version found - trying debian build")
 			execute_process(COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/debian_prepare_xorg.sh)
 			add_custom_target(xorg-debian
-												COMMAND cd external/xorg-server && ./debian/rules build)
+												COMMAND cd external/Source/xorg-server && ./debian/rules build)
 			add_custom_target(all DEPENDS xorg-debian)
 			message(NOTE: " run the following command after build: 
 			cp ${CMAKE_CURRENT_SOURCE_DIR}/scripts/LocalConfigSettings.cmake ${CMAKE_CURRENT_SOURCE_DIR}/../rdp/")
