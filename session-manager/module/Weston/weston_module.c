@@ -188,7 +188,7 @@ char* weston_rds_module_start(RDS_MODULE_COMMON* module)
 
 	rdsModuleWeston* weston = (rdsModuleWeston*) module;
 	DWORD SessionId = weston->commonModule.sessionId;
-	char *appName = "/tmp/weston";
+	char *appName = "weston";
 	weston->monitorStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
 	WLog_Print(weston->log, WLOG_DEBUG, "RdsModuleStart: SessionId: %d Endpoint: %s",
