@@ -46,12 +46,23 @@ int freerds_message_server_is_terminated(rdsBackend* backend)
 
 int freerds_message_server_begin_update(rdsBackend* backend, RDS_MSG_BEGIN_UPDATE* msg)
 {
+	rdsBackendConnector *connector = (rdsBackendConnector *)backend;
+	connector->frameInProgress = TRUE;
 	msg->type = RDS_SERVER_BEGIN_UPDATE;
 	return freerds_server_message_enqueue(backend, (RDS_MSG_COMMON*) msg);
 }
 
 int freerds_message_server_end_update(rdsBackend* backend, RDS_MSG_END_UPDATE* msg)
 {
+	rdsBackendConnector *connector = (rdsBackendConnector *)backend;
+
+	connector->frameInProgress = FALSE;
+	if (connector->waitingEndUpdate)
+	{
+		connector->sendCurrentFrame = TRUE;
+		connector->waitingEndUpdate = FALSE;
+	}
+
 	msg->type = RDS_SERVER_END_UPDATE;
 	return freerds_server_message_enqueue(backend, (RDS_MSG_COMMON*) msg);
 }
@@ -338,7 +349,7 @@ int freerds_message_server_queue_pack(rdsBackendConnector* connector)
 {
 	RDS_RECT rect;
 	int ChainedMode;
-	wLinkedList* list;
+	wLinkedList* iterator;
 	rdsConnection* connection;
 	RDS_MSG_COMMON* node;
 	pixman_bool_t status;
@@ -348,15 +359,15 @@ int freerds_message_server_queue_pack(rdsBackendConnector* connector)
 	ChainedMode = 0;
 	connection = connector->connection;
 
-	list = connector->ServerList;
+	iterator = connector->ServerList;
 
 	pixman_region32_init(&region);
 
-	LinkedList_Enumerator_Reset(list);
+	LinkedList_Enumerator_Reset(iterator);
 
-	while (LinkedList_Enumerator_MoveNext(list))
+	while (LinkedList_Enumerator_MoveNext(iterator))
 	{
-		node = (RDS_MSG_COMMON*) LinkedList_Enumerator_Current(list);
+		node = (RDS_MSG_COMMON*) LinkedList_Enumerator_Current(iterator);
 
 		if ((!ChainedMode) && (node->msgFlags & RDS_MSG_FLAG_RECT))
 		{
@@ -369,7 +380,7 @@ int freerds_message_server_queue_pack(rdsBackendConnector* connector)
 		}
 	}
 
-	LinkedList_Clear(list);
+	LinkedList_Clear(iterator);
 
 	if (!ChainedMode)
 	{
@@ -408,6 +419,7 @@ int freerds_message_server_queue_pack(rdsBackendConnector* connector)
 	}
 
 	pixman_region32_fini(&region);
+	connector->sendCurrentFrame = FALSE;
 
 	return 0;
 }

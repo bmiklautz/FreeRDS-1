@@ -51,7 +51,7 @@ void* freerds_client_thread(void* arg)
 	SetWaitableTimer(PackTimer, &due, 1000 / fps, NULL, NULL, 0);
 
 	nCount = 0;
-	events[nCount++] = PackTimer;
+	events[nCount++] = PackTimer; // the timer _MUST_ be the first one
 	events[nCount++] = connector->StopEvent;
 	events[nCount++] = connector->hClientPipe;
 
@@ -59,20 +59,27 @@ void* freerds_client_thread(void* arg)
 	{
 		status = WaitForMultipleObjects(nCount, events, FALSE, INFINITE);
 
-		if (WaitForSingleObject(connector->StopEvent, 0) == WAIT_OBJECT_0)
+		if ((status == WAIT_OBJECT_0 + 1) ||
+			(WaitForSingleObject(connector->StopEvent, 0) == WAIT_OBJECT_0))
 		{
 			break;
 		}
 
-		if (WaitForSingleObject(connector->hClientPipe, 0) == WAIT_OBJECT_0)
+		if ((status == WAIT_OBJECT_0 + 2) ||
+			(WaitForSingleObject(connector->hClientPipe, 0) == WAIT_OBJECT_0))
 		{
-			if (freerds_transport_receive((rdsBackend*) connector) < 0)
+			if (freerds_transport_receive((rdsBackend*)connector) < 0) {
+				fprintf(stderr, "%s: handle unexpected termination of the out-service\n");
 				break;
+			}
 		}
 
 		if (status == WAIT_OBJECT_0)
 		{
-			freerds_message_server_queue_pack(connector);
+			if (!connector->frameInProgress)
+				connector->sendCurrentFrame = TRUE;
+			else
+				connector->waitingEndUpdate = TRUE;
 
 			if (connector->fps != fps)
 			{
@@ -81,6 +88,9 @@ void* freerds_client_thread(void* arg)
 				SetWaitableTimer(PackTimer, &due, 1000 / fps, NULL, NULL, 0);
 			}
 		}
+
+		if (connector->sendCurrentFrame)
+			freerds_message_server_queue_pack(connector);
 	}
 
 	CloseHandle(PackTimer);
