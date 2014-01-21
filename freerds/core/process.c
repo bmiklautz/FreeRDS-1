@@ -52,6 +52,7 @@ void freerds_peer_context_new(freerdp_peer* client, rdsConnection* context)
 	settings->OsMajorType = OSMAJORTYPE_UNIX;
 	settings->OsMinorType = OSMINORTYPE_PSEUDO_XSERVER;
 	settings->ColorDepth = 32;
+	settings->RefreshRect = FALSE;
 	settings->RemoteFxCodec = TRUE;
 	settings->BitmapCacheV3Enabled = TRUE;
 	settings->FrameMarkerCommandEnabled = TRUE;
