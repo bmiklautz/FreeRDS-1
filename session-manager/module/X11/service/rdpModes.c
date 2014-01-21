@@ -28,6 +28,7 @@
 
 #include <winpr/crt.h>
 #include <winpr/path.h>
+#include <winpr/file.h>
 #include <winpr/stream.h>
 
 #define DEFINE_SCREEN_SIZE(_width, _height) ((_width << 16) | _height)
@@ -362,34 +363,94 @@ static const char* g_MonitorsXmlFmt =
 "  </configuration>\n"
 "</monitors>\n";
 
-int rdpWriteGnomeMonitorConfiguration(ScreenPtr pScreen)
+int rdpWriteGnomeMonitorConfig(int width, int height)
 {
 	FILE* fp;
 	int length;
 	char monitors_xml[2048];
 	char* monitors_xml_path;
-	rdpRandRInfoPtr randr = rdpGetRandRFromScreen(pScreen);
 
-	if (!randr)
-		return -1;
-
-	sprintf(monitors_xml, g_MonitorsXmlFmt, "RDP-0",
-			randr->width, randr->height, 60, 0, 0);
+	sprintf(monitors_xml, g_MonitorsXmlFmt, "RDP-0", width, height, 60, 0, 0);
 
 	length = strlen(monitors_xml);
 
-	monitors_xml_path = GetKnownSubPath(KNOWN_PATH_XDG_CONFIG_HOME, "monitors.rdp.xml");
+	monitors_xml_path = GetKnownSubPath(KNOWN_PATH_XDG_CONFIG_HOME, "monitors.xml");
+
+	if (PathFileExistsA(monitors_xml_path))
+	{
+		DeleteFileA(monitors_xml_path);
+	}
 
 	fp = fopen(monitors_xml_path, "w+b");
 
 	if (fp)
 	{
-		fwrite((void*) monitors_xml, length + 1, 1, fp);
+		fwrite((void*) monitors_xml, length, 1, fp);
 		fflush(fp);
 		fclose(fp);
 	}
 
 	free(monitors_xml_path);
+
+	return 0;
+}
+
+static const char* g_DisplaysXmlFmt =
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+"\n"
+"<channel name=\"displays\" version=\"1.0\">\n"
+"  <property name=\"Default\" type=\"empty\">\n"
+"    <property name=\"%s\" type=\"string\" value=\"ViewSonic Corporation 23&quot;\">\n"
+"      <property name=\"Active\" type=\"bool\" value=\"true\"/>\n"
+"      <property name=\"Resolution\" type=\"string\" value=\"%dx%d\"/>\n"
+"      <property name=\"RefreshRate\" type=\"double\" value=\"%d.000000\"/>\n"
+"      <property name=\"Rotation\" type=\"int\" value=\"0\"/>\n"
+"      <property name=\"Reflection\" type=\"string\" value=\"0\"/>\n"
+"      <property name=\"Primary\" type=\"bool\" value=\"true\"/>\n"
+"      <property name=\"Position\" type=\"empty\">\n"
+"        <property name=\"X\" type=\"int\" value=\"%d\"/>\n"
+"        <property name=\"Y\" type=\"int\" value=\"%d\"/>\n"
+"      </property>\n"
+"    </property>\n"
+"  </property>\n"
+"</channel>\n";
+
+int rdpWriteXfce4MonitorConfig(int width, int height)
+{
+	FILE* fp;
+	int length;
+	char displays_xml[2048];
+	char* displays_xml_path;
+
+	sprintf(displays_xml, g_DisplaysXmlFmt, "RDP-0", width, height, 60, 0, 0);
+
+	length = strlen(displays_xml);
+
+	displays_xml_path = GetKnownSubPath(KNOWN_PATH_XDG_CONFIG_HOME, "xfce4/xfconf/xfce-perchannel-xml/displays.xml");
+
+	if (PathFileExistsA(displays_xml_path))
+	{
+		DeleteFileA(displays_xml_path);
+	}
+
+	fp = fopen(displays_xml_path, "w+b");
+
+	if (fp)
+	{
+		fwrite((void*) displays_xml, length, 1, fp);
+		fflush(fp);
+		fclose(fp);
+	}
+
+	free(displays_xml_path);
+
+	return 0;
+}
+
+int rdpWriteMonitorConfig(int width, int height)
+{
+	rdpWriteGnomeMonitorConfig(width, height);
+	rdpWriteXfce4MonitorConfig(width, height);
 
 	return 0;
 }
@@ -435,7 +496,6 @@ int rdpProbeModes(ScreenPtr pScreen)
 				continue; /* required buffer size is too large */
 		}
 
-		modeInfo.id = index;
 		rdpGtfMode(&modeInfo, width, height, 60.0, 0, 0);
 
 		sprintf(name, "%dx%d", modeInfo.width, modeInfo.height);
@@ -449,6 +509,66 @@ int rdpProbeModes(ScreenPtr pScreen)
 	randr->numModes = index;
 
 	rdpModeSelect(pScreen, randr->width, randr->height);
+
+	return 0;
+}
+
+int rdpModeInfoCompare(xRRModeInfo* pModeInfo1, xRRModeInfo* pModeInfo2)
+{
+	int size1, size2;
+
+	size1 = pModeInfo1->width * pModeInfo1->height;
+	size2 = pModeInfo2->width * pModeInfo2->height;
+
+	if (size1 < size2)
+		return -1;
+	else if (size1 > size2)
+		return 1;
+	else
+		return 0;
+}
+
+int rdpModeAdd(ScreenPtr pScreen, int width, int height)
+{
+	int index;
+	char name[64];
+	RRModePtr mode;
+	RROutputPtr output;
+	xRRModeInfo modeInfo;
+	rdpRandRInfoPtr randr;
+
+	randr = rdpGetRandRFromScreen(pScreen);
+
+	if (!randr)
+		return -1;
+
+	ZeroMemory(&modeInfo, sizeof(xRRModeInfo));
+
+	rdpGtfMode(&modeInfo, width, height, 60.0, 0, 0);
+
+	sprintf(name, "%dx%d", modeInfo.width, modeInfo.height);
+	modeInfo.nameLength = strlen(name);
+
+	for (index = 0; index < randr->numModes; index++)
+	{
+		if (rdpModeInfoCompare(&(randr->modes[index]->mode), &modeInfo) < 0)
+			break;
+	}
+
+	mode = RRModeGet(&modeInfo, name);
+
+	MoveMemory(&(randr->modes[index + 1]), &(randr->modes[index]), (randr->numModes - index) * sizeof(RRModePtr));
+	randr->numModes++;
+
+	randr->modes[index] = mode;
+
+	output = RRFirstOutput(pScreen);
+
+	if (output)
+	{
+		if (!RROutputSetModes(output, randr->modes, randr->numModes, 0))
+			return -1;
+	}
 
 	return 0;
 }
@@ -475,6 +595,14 @@ int rdpModeSelect(ScreenPtr pScreen, int width, int height)
 			found = TRUE;
 			break;
 		}
+	}
+
+	if (!found)
+	{
+		if (rdpModeAdd(pScreen, width, height) < 0)
+			return -1;
+
+		return rdpModeSelect(pScreen, width, height);
 	}
 
 	if (!found && !randr->mode)
