@@ -200,7 +200,6 @@ int freerds_client_inbound_glyph_index(rdsBackend* backend, RDS_MSG_GLYPH_INDEX*
 
 static void detach_framebuffer(RDS_FRAMEBUFFER *framebuffer)
 {
-
 	fprintf(stderr, "detaching segment %d from %p\n",
 			framebuffer->fbSegmentId, framebuffer->fbSharedMemory);
 	shmdt(framebuffer->fbSharedMemory);
@@ -238,8 +237,8 @@ int freerds_client_inbound_shared_framebuffer(rdsBackend* backend, RDS_MSG_SHARE
 
 		if (addr == ((void*) (size_t) (-1)))
 		{
-			fprintf(stderr, "failed to attach to segment %d, errno: %d\n",
-					backend->framebuffer.fbSegmentId, errno);
+			fprintf(stderr, "failed to attach to segment %d, errno=%d(%s)\n",
+					backend->framebuffer.fbSegmentId, errno, strerror(errno));
 			return 1;
 		}
 

@@ -88,6 +88,10 @@ struct rds_backend_connector
 	freerdp* instance;
 	rdpSettings* settings;
 	rdsConnection* connection;
+
+	BOOL frameInProgress;
+	BOOL waitingEndUpdate;
+	BOOL sendCurrentFrame;
 };
 
 struct rds_notification_msg_switch
